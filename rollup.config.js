@@ -30,7 +30,7 @@ export default [
     },
     plugins,
   },
-  // UMD (browser script tag)
+  // UMD (browser script tag, minified)
   {
     input: 'src/wavesurfer.ts',
     output: {
@@ -40,6 +40,17 @@ export default [
       exports: 'default',
     },
     plugins,
+  },
+  // UMD (browser script tag, non-minified, .umd.js)
+  {
+    input: 'src/wavesurfer.ts',
+    output: {
+      name: 'WaveSurfer',
+      file: 'dist/wavesurfer.umd.js',
+      format: 'umd',
+      exports: 'default',
+    },
+    plugins: [webWorkerLoader(), typescript({ declaration: false, declarationDir: null })],
   },
 
   // Compiled type definitions
@@ -83,7 +94,7 @@ export default [
         },
         plugins,
       },
-      // UMD (browser script tag)
+      // UMD (browser script tag, minified)
       {
         input: plugin,
         output: {
@@ -101,6 +112,25 @@ export default [
         },
         external: ['WaveSurfer'],
         plugins,
+      },
+      // UMD (browser script tag, non-minified, .umd.js)
+      {
+        input: plugin,
+        output: {
+          name: plugin
+            .replace('src/plugins/', '')
+            .replace('.ts', '')
+            .replace(/^./, (c) => `WaveSurfer.${c.toUpperCase()}`),
+          file: plugin.replace('src/', 'dist/').replace('.ts', '.umd.js'),
+          format: 'umd',
+          extend: true,
+          globals: {
+            WaveSurfer: 'WaveSurfer',
+          },
+          exports: 'default',
+        },
+        external: ['WaveSurfer'],
+        plugins: [webWorkerLoader(), typescript({ declaration: false, declarationDir: null })],
       },
     ])
     .flat(),
