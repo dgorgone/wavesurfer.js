@@ -49,10 +49,17 @@ async function watchProgress(response: Response, progressCallback: (percentage: 
 }
 
 async function fetchBlob(
-  url: string,
+  input: string | Blob,
   progressCallback: (percentage: number) => void,
   requestInit?: RequestInit,
 ): Promise<Blob> {
+  // If input is a Blob, return it directly
+  if (input instanceof Blob) {
+    return input
+  }
+
+  const url = input
+
   // Fetch the resource
   const response = await fetch(url, requestInit)
 
