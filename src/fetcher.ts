@@ -31,10 +31,17 @@ async function watchProgress(response: Response, progressCallback: (percentage: 
 }
 
 async function fetchBlob(
-  url: string,
+  input: string | Blob,
   progressCallback: (percentage: number) => void,
   requestInit?: RequestInit,
 ): Promise<Blob> {
+  // If input is a Blob, return it directly
+  if (input instanceof Blob) {
+    return input
+  }
+
+  const url = input
+
   // Fetch the resource
   const response = await fetch(url, requestInit)
 
@@ -42,8 +49,11 @@ async function fetchBlob(
     throw new Error(`Failed to fetch ${url}: ${response.status} (${response.statusText})`)
   }
 
-  // Read the data to track progress
-  watchProgress(response.clone(), progressCallback)
+  // Only track progress if response.body exists and Content-Length is present
+  const contentLength = Number(response.headers.get('Content-Length')) || 0
+  if (response.body && contentLength > 0) {
+    watchProgress(response.clone(), progressCallback)
+  }
 
   return response.blob()
 }
