@@ -3,6 +3,9 @@ async function decode(audioData: ArrayBuffer, sampleRate: number): Promise<Audio
   const audioCtx = new AudioContext({ sampleRate })
   try {
     return await audioCtx.decodeAudioData(audioData)
+  } catch (err) {
+    console.error('decodeAudioData failed:', err)
+    throw err
   } finally {
     // Ensure AudioContext is always closed, even on synchronous errors
     audioCtx.close()

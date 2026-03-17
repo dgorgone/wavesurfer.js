@@ -42,6 +42,8 @@ export type WaveSurferOptions = {
   fillParent?: boolean
   /** Audio URL */
   url?: string
+  /** Optional audio Blob for in-memory audio */
+  blob?: Blob
   /** Pre-computed audio data, arrays of floats for each channel */
   peaks?: Array<Float32Array | number[]>
   /** Pre-computed audio duration in seconds */
@@ -171,6 +173,8 @@ class WaveSurfer extends Player<WaveSurferEvents> {
   public static readonly BasePlugin = BasePlugin
   public static readonly dom = dom
 
+  private isUserSeeking: boolean = false
+
   /** Create a new WaveSurfer instance */
   public static create(options: WaveSurferOptions) {
     return new WaveSurfer(options)
@@ -225,23 +229,22 @@ class WaveSurfer extends Player<WaveSurferEvents> {
     this.initReactiveState()
     this.initPlugins()
 
-    // Read the initial URL before load has been called
+    // Read the initial URL and blob before load has been called
     const initialUrl = this.options.url || this.getSrc() || ''
+    const initialBlob = this.options.blob
 
     // Init and load async to allow external events to be registered
     Promise.resolve().then(() => {
       this.emit('init')
-
-      // Load audio if URL or an external media with an src is passed,
-      // of render w/o audio if pre-decoded peaks and duration are provided
+      // Load audio if URL/blob or an external media with an src is passed,
+      // or render w/o audio if pre-decoded peaks and duration are provided
       const { peaks, duration } = this.options
-      if (initialUrl || (peaks && duration)) {
-        // Swallow async errors because they cannot be caught from a constructor call.
-        // Subscribe to the wavesurfer's error event to handle them.
-        this.load(initialUrl, peaks, duration).catch((err) => {
+      if (initialUrl || initialBlob || (peaks && duration)) {
+        this.loadAudio(initialUrl, initialBlob, peaks, duration).catch((err) => {
           // Emit error event for proper error handling
           this.emit('error', err instanceof Error ? err : new Error(String(err)))
         })
+      }
       }
     })
   }
@@ -313,7 +316,12 @@ class WaveSurfer extends Player<WaveSurferEvents> {
       }),
 
       this.onMediaEvent('seeking', () => {
-        this.emit('seeking', this.getCurrentTime())
+        if (true) { // this.isUserSeeking) {
+          //console.log('[WS-DEBUG] wavesurfer.js core: .emit("seeking")', this.getCurrentTime(), new Error().stack);
+          this.emit('seeking', this.getCurrentTime())
+          // Reset flag after emitting
+          //this.isUserSeeking = false 
+        }
       }),
 
       this.onMediaEvent('error', () => {
@@ -328,6 +336,7 @@ class WaveSurfer extends Player<WaveSurferEvents> {
       // Seek on click
       this.renderer.on('click', (relativeX, relativeY) => {
         if (this.options.interact) {
+          this.isUserSeeking = true // Set flag to indicate user interaction
           this.seekTo(relativeX)
           this.emit('interaction', relativeX * this.getDuration())
           this.emit('click', relativeX, relativeY)
@@ -397,6 +406,7 @@ class WaveSurfer extends Player<WaveSurferEvents> {
           this.seekTo(relativeX)
         }, debounceTime)
 
+        this.isUserSeeking = true // Set flag to indicate user interaction
         this.emit('interaction', relativeX * this.getDuration())
         this.emit('drag', relativeX)
       })
@@ -529,6 +539,16 @@ class WaveSurfer extends Player<WaveSurferEvents> {
     // Set the mediaelement source
     this.setSrc(url, blob)
 
+    // Debug: Listen for media errors
+    const mediaElement = this.getMediaElement()
+    mediaElement.addEventListener('error', () => {
+      console.error('Media error:', mediaElement.error)
+    })
+    // Debug: Listen for loadedmetadata
+    mediaElement.addEventListener('loadedmetadata', () => {
+      console.log('loadedmetadata fired, duration:', this.getDuration())
+    })
+
     // Wait for the audio duration
     const audioDuration = await new Promise<number>((resolve) => {
       const staticDuration = duration || this.getDuration()
@@ -536,7 +556,10 @@ class WaveSurfer extends Player<WaveSurferEvents> {
         resolve(staticDuration)
       } else {
         this.mediaSubscriptions.push(
-          this.onMediaEvent('loadedmetadata', () => resolve(this.getDuration()), { once: true }),
+          this.onMediaEvent('loadedmetadata', () => {
+            console.log('Promise resolved, duration:', this.getDuration())
+            resolve(this.getDuration())
+          }, { once: true }),
         )
       }
     })
