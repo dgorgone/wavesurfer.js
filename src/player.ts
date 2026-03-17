@@ -78,14 +78,16 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     }
     // Speed
     if (options.playbackRate != null) {
-      this.onMediaEvent(
-        'canplay',
-        () => {
-          if (options.playbackRate != null) {
-            this.media.playbackRate = options.playbackRate
-          }
-        },
-        { once: true },
+      this.reactiveMediaEventCleanups.push(
+        this.onMediaEvent(
+          'canplay',
+          () => {
+            if (options.playbackRate != null) {
+              this.media.playbackRate = options.playbackRate
+            }
+          },
+          { once: true },
+        ),
       )
     }
   }
@@ -167,8 +169,11 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     callback: (ev: HTMLElementEventMap[K]) => void,
     options?: boolean | AddEventListenerOptions,
   ): () => void {
-    this.media.addEventListener(event, callback, options)
-    return () => this.media.removeEventListener(event, callback, options)
+    const element = this.media
+    element.addEventListener(event, callback, options)
+    return () => {
+      element.removeEventListener(event, callback, options)
+    }
   }
 
   protected getSrc() {
@@ -186,49 +191,26 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     return this.media.canPlayType(type) !== ''
   }
 
-protected setSrc(url: string, blob?: Blob) {
-  const prevSrc = this.getSrc();
-  // Debug: previous source
-  console.log('Previous src:', prevSrc);
+  protected setSrc(url: string, blob?: Blob) {
+    const prevSrc = this.getSrc()
+    if (url && prevSrc === url) return // no need to change the source
 
-  if (url && prevSrc === url) {
-    console.log('Source unchanged, skipping setSrc');
-    return; // no need to change the source
-  }
+    this.revokeSrc()
+    const newSrc = blob instanceof Blob && (this.canPlayType(blob.type) || !url) ? URL.createObjectURL(blob) : url
 
-  this.revokeSrc();
+    // Reset the media element, otherwise it keeps the previous source
+    if (prevSrc) {
+      this.media.removeAttribute('src')
+    }
 
-  let newSrc: string | undefined;
-  let canPlay = false;
-  if (blob instanceof Blob) {
-    canPlay = this.canPlayType(blob.type);
-    console.log('Blob type:', blob.type, 'Can play:', canPlay);
-    if (canPlay || !url) {
-      newSrc = URL.createObjectURL(blob);
-      console.log('Created object URL for blob:', newSrc);
+    if (newSrc || url) {
+      try {
+        this.media.src = newSrc
+      } catch {
+        this.media.src = url
+      }
     }
   }
-  if (!newSrc) {
-    newSrc = url;
-    console.log('Using URL as source:', newSrc);
-  }
-
-  // Reset the media element, otherwise it keeps the previous source
-  if (prevSrc) {
-    this.media.removeAttribute('src');
-    console.log('Removed previous src attribute');
-  }
-
-  if (newSrc || url) {
-    try {
-      this.media.src = newSrc!;
-      console.log('Set media.src to:', newSrc);
-    } catch (e) {
-      this.media.src = url;
-      console.log('Error setting src, fallback to url:', url, e);
-    }
-  }
-}
 
   protected destroy() {
     // Cleanup reactive media event listeners
