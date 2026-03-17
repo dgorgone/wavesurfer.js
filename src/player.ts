@@ -79,14 +79,16 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     }
     // Speed
     if (options.playbackRate != null) {
-      this.onMediaEvent(
-        'canplay',
-        () => {
-          if (options.playbackRate != null) {
-            this.media.playbackRate = options.playbackRate
-          }
-        },
-        { once: true },
+      this.reactiveMediaEventCleanups.push(
+        this.onMediaEvent(
+          'canplay',
+          () => {
+            if (options.playbackRate != null) {
+              this.media.playbackRate = options.playbackRate
+            }
+          },
+          { once: true },
+        ),
       )
     }
   }
@@ -168,8 +170,11 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     callback: (ev: HTMLElementEventMap[K]) => void,
     options?: boolean | AddEventListenerOptions,
   ): () => void {
-    this.media.addEventListener(event, callback, options)
-    return () => this.media.removeEventListener(event, callback, options)
+    const element = this.media
+    element.addEventListener(event, callback, options)
+    return () => {
+      element.removeEventListener(event, callback, options)
+    }
   }
 
   protected getSrc() {
@@ -204,7 +209,6 @@ class Player<T extends GeneralEventTypes> extends EventEmitter<T> {
     if (prevSrc) {
       this.media.removeAttribute('src')
     }
-
     if (newSrc || url) {
       try {
         this.media.src = newSrc
